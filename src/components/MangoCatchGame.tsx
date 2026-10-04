@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useVisitorName } from "@/lib/visitorName";
 
 /* ---------- 遊戲設定（想調難度改這裡） ---------- */
-const LIVES = 3;
+const GAME_SECONDS = 60; // 每局限時
+const BUG_PENALTY = 2; // 接到蟲扣幾分
 const GOLDEN_CHANCE = 0.1; // 金煌芒果出現機率（+3 分）
 const BUG_CHANCE_START = 0.12; // 蟲出現機率，隨時間增加
 const BUG_CHANCE_MAX = 0.28;
@@ -39,7 +40,7 @@ export function MangoCatchGame() {
 
   const [status, setStatus] = useState<Status>("ready");
   const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(LIVES);
+  const [timeLeft, setTimeLeft] = useState(GAME_SECONDS);
   const [best, setBest] = useState(0);
   const [newBest, setNewBest] = useState(false);
 
@@ -53,7 +54,6 @@ export function MangoCatchGame() {
     targetX: 0,
     keys: { left: false, right: false },
     score: 0,
-    lives: LIVES,
     elapsed: 0,
     spawnTimer: 0,
     shake: 0,
@@ -204,12 +204,12 @@ export function MangoCatchGame() {
       setStatus("over");
     };
 
-    const loseLife = (x: number, y: number) => {
+    const hitBug = (x: number, y: number) => {
       const g = game.current;
-      g.lives -= 1;
+      g.score = Math.max(0, g.score - BUG_PENALTY);
       g.shake = 1;
-      g.popups.push({ x, y, text: "−❤", color: "#e2342b", life: 1 });
-      setLives(g.lives);
+      g.popups.push({ x, y, text: `−${BUG_PENALTY}`, color: "#e2342b", life: 1 });
+      setScore(g.score);
       navigator.vibrate?.(60);
     };
 
@@ -218,6 +218,7 @@ export function MangoCatchGame() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       g.elapsed += dt;
+      setTimeLeft(Math.max(0, Math.ceil(GAME_SECONDS - g.elapsed)));
 
       // 移動籃子：鍵盤或指標
       const { bw, bh } = basketSize();
@@ -259,7 +260,7 @@ export function MangoCatchGame() {
             it.done = true;
             it.y = g.h + 999; // 從畫面移除
             if (it.kind === "bug") {
-              loseLife(g.basketX, rim - 20);
+              hitBug(g.basketX, rim - 20);
             } else {
               const points = it.kind === "golden" ? 3 : 1;
               g.score += points;
@@ -268,8 +269,7 @@ export function MangoCatchGame() {
             }
           }
         } else if (it.y - it.r > g.h) {
-          it.done = true;
-          if (it.kind !== "bug") loseLife(it.x, g.h - 30);
+          it.done = true; // 漏接不扣分
         }
       }
       g.items = g.items.filter((it) => it.y - it.r <= g.h);
@@ -283,7 +283,7 @@ export function MangoCatchGame() {
 
       draw();
 
-      if (g.lives <= 0) {
+      if (g.elapsed >= GAME_SECONDS) {
         endGame();
         return;
       }
@@ -318,10 +318,10 @@ export function MangoCatchGame() {
 
   const start = () => {
     const g = game.current;
-    Object.assign(g, { items: [], popups: [], score: 0, lives: LIVES, elapsed: 0, spawnTimer: 0.4, shake: 0 });
+    Object.assign(g, { items: [], popups: [], score: 0, elapsed: 0, spawnTimer: 0.4, shake: 0 });
     g.basketX = g.targetX = g.w / 2;
     setScore(0);
-    setLives(LIVES);
+    setTimeLeft(GAME_SECONDS);
     setNewBest(false);
     setStatus("playing");
   };
@@ -343,19 +343,19 @@ export function MangoCatchGame() {
       >
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-label="接芒果遊戲畫面" />
 
-        {/* 分數列 */}
+        {/* 分數列 + 倒數計時 */}
         {(status === "playing" || status === "paused") && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 sm:p-4">
-            <div className="glass-strong rounded-full px-4 py-1.5 font-bold">
-              🥭 <span className="tabular-nums">{score}</span> 分
+          <>
+            {/* 時間條：隨倒數縮短 */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-white/40">
+              <div
+                className={`h-full transition-[width] duration-1000 ease-linear ${timeLeft <= 10 ? "bg-[#e2342b]" : "bg-mango-500"}`}
+                style={{ width: `${(timeLeft / GAME_SECONDS) * 100}%` }}
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="glass-strong rounded-full px-3 py-1.5 tracking-widest" aria-label={`剩下 ${lives} 條命`}>
-                {Array.from({ length: LIVES }, (_, i) => (
-                  <span key={i} className={i < lives ? "" : "opacity-25 grayscale"}>
-                    ❤️
-                  </span>
-                ))}
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 pt-4 sm:p-4 sm:pt-5">
+              <div className="glass-strong rounded-full px-4 py-1.5 font-bold">
+                🥭 <span className="tabular-nums">{score}</span> 分
               </div>
               <button
                 type="button"
@@ -366,7 +366,22 @@ export function MangoCatchGame() {
                 {status === "playing" ? "⏸" : "▶"}
               </button>
             </div>
-          </div>
+            <div
+              className="pointer-events-none absolute inset-x-0 top-3 flex flex-col items-center sm:top-4"
+              role="timer"
+              aria-label={`剩下 ${timeLeft} 秒`}
+            >
+              <span
+                key={timeLeft <= 10 ? timeLeft : undefined}
+                className={`text-5xl font-black tabular-nums drop-shadow-[0_2px_6px_rgba(255,255,255,0.9)] sm:text-6xl ${
+                  timeLeft <= 10 ? "animate-pop-in text-[#e2342b]" : "text-mango-700"
+                }`}
+              >
+                {timeLeft}
+              </span>
+              <span className="text-xs font-semibold tracking-widest text-ink-soft">秒</span>
+            </div>
+          </>
         )}
 
         {/* 開始 / 暫停 / 結束畫面 */}
@@ -380,7 +395,8 @@ export function MangoCatchGame() {
                   <ul className="mt-4 space-y-1.5 text-sm text-ink-soft">
                     <li>🥭 接到芒果 <b className="text-mango-600">+1 分</b></li>
                     <li>✨ 發光的金煌芒果 <b className="text-mango-600">+3 分</b></li>
-                    <li>🐛 接到蟲、漏接芒果都會 <b className="text-[#e2342b]">扣一顆心</b></li>
+                    <li>🐛 接到蟲 <b className="text-[#e2342b]">−{BUG_PENALTY} 分</b></li>
+                    <li>⏱ 限時 <b className="text-mango-600">{GAME_SECONDS} 秒</b>，漏接不扣分</li>
                   </ul>
                   <p className="mt-4 text-xs text-ink-soft">電腦：滑鼠或 ← → 鍵移動　手機：手指左右滑</p>
                   <GameButton onClick={start}>開始遊戲</GameButton>
@@ -395,7 +411,7 @@ export function MangoCatchGame() {
               )}
               {status === "over" && (
                 <>
-                  <p className="text-sm font-semibold tracking-[0.2em] text-mango-600 uppercase">Game Over</p>
+                  <p className="text-sm font-semibold tracking-[0.2em] text-mango-600 uppercase">時間到！</p>
                   <h2 className="mt-2 text-2xl font-black">{name ? `${name}，` : ""}你拿到了</h2>
                   <p className="mt-2 text-6xl font-black text-mango-600 tabular-nums">{score}</p>
                   <p className="mt-1 text-sm text-ink-soft">分</p>
