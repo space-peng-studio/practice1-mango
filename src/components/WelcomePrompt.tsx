@@ -17,6 +17,7 @@ export function WelcomePrompt() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(false);
+  const [hadName, setHadName] = useState(false);
 
   useEffect(() => {
     let skipped = false;
@@ -26,7 +27,9 @@ export function WelcomePrompt() {
     if (!readVisitorName() && !skipped) dialogRef.current?.showModal();
 
     return onNameEditRequest(() => {
-      setValue(readVisitorName() ?? "");
+      const current = readVisitorName() ?? "";
+      setValue(current);
+      setHadName(Boolean(current));
       setEditing(true);
       dialogRef.current?.showModal();
     });
@@ -76,7 +79,7 @@ export function WelcomePrompt() {
         </div>
 
         <h2 id="welcome-title" className="mt-4 text-2xl font-black">
-          {editing ? "修改稱呼" : "歡迎來到金芒園"}
+          {!editing ? "歡迎來到金芒園" : hadName ? "修改稱呼" : "輸入稱呼"}
         </h2>
         <p className="mt-2 text-sm text-ink-soft">我們該怎麼稱呼你呢？</p>
 
