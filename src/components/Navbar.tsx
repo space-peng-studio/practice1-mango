@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { requestNameEdit, useVisitorName } from "@/lib/visitorName";
 import { Button } from "./Button";
 
 const links = [
@@ -19,7 +18,6 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const name = useVisitorName();
   // 首頁錨點（/#...）不算；/blog、/game 這類獨立頁面在該頁時要亮起來
   const isActive = (href: string) => !href.includes("#") && pathname.startsWith(href);
 
@@ -61,15 +59,6 @@ export function Navbar() {
         </ul>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={requestNameEdit}
-            aria-label={name ? `修改稱呼（目前是 ${name}）` : "輸入稱呼"}
-            className="flex max-w-36 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-white/60 hover:text-ink"
-          >
-            <span aria-hidden="true">👤</span>
-            <span className="truncate">{name ?? "輸入稱呼"}</span>
-          </button>
           <Button href="/#order" size="sm" className="hidden sm:inline-flex">
             開賣通知
           </Button>
